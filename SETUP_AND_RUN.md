@@ -83,12 +83,15 @@ To make the env var permanent across future shells:
 [Environment]::SetEnvironmentVariable('DGLBACKEND', 'pytorch', 'User')
 ```
 
-Verify the patch (note the OUTER single quotes — PowerShell's escape is backtick,
-not backslash, so a `\"` inside `"..."` would terminate the string):
+Verify the patch by running the helper script:
 
 ```powershell
-python -c 'from dgllife.model.model_zoo.gcn_predictor import GCNPredictor; import inspect; src = inspect.getsource(GCNPredictor.forward); print("PATCH OK" if "model_use" in src else "NOT PATCHED")'
+python verify_patch.py
 ```
+
+Should print `PATCH OK`. (Windows PowerShell 5.1 strips quotes when forwarding
+to native exes; a `python -c "..."` one-liner with embedded quotes is
+unreliable. The helper script sidesteps the issue.)
 
 ### 3. Regenerate the splits in your env
 
