@@ -67,14 +67,27 @@ GCN forward pass.
 The upstream `replace.sh` is Linux + Python 3.9 only. On Windows / Python 3.10:
 
 ```powershell
+# DGL prints a one-shot backend-selection notice to stdout on first import.
+# If you do not set this, that notice pollutes any $variable that captures the
+# next `python -c` output and Copy-Item will fail with a "drive not found" error.
+$env:DGLBACKEND = 'pytorch'
+
 $site = python -c "import dgllife, os; print(os.path.dirname(dgllife.__file__))"
+Write-Output "site=$site"   # eyeball: should be a clean path, not multi-line text
 Copy-Item gcn_predictor.py "$site\model\model_zoo\gcn_predictor.py" -Force
 ```
 
-Verify:
+To make the env var permanent across future shells:
 
 ```powershell
-python -c "from dgllife.model.model_zoo.gcn_predictor import GCNPredictor; import inspect; src = inspect.getsource(GCNPredictor.forward); print('PATCH OK' if \"model_use\" in src else 'NOT PATCHED')"
+[Environment]::SetEnvironmentVariable('DGLBACKEND', 'pytorch', 'User')
+```
+
+Verify the patch (note the OUTER single quotes — PowerShell's escape is backtick,
+not backslash, so a `\"` inside `"..."` would terminate the string):
+
+```powershell
+python -c 'from dgllife.model.model_zoo.gcn_predictor import GCNPredictor; import inspect; src = inspect.getsource(GCNPredictor.forward); print("PATCH OK" if "model_use" in src else "NOT PATCHED")'
 ```
 
 ### 3. Regenerate the splits in your env
