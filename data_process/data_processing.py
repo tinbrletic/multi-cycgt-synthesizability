@@ -12,16 +12,11 @@ torch.manual_seed(3407)
 warnings.filterwarnings("ignore")
 if __name__ == '__main__':
 
-    data = pd.read_csv('./CycPeptMPDB_Peptide_Assay_PAMPA(4).csv')
+    data = pd.read_csv('./peptide_synthesis_adapted.csv')
 
-    df = pd.read_csv('./CycPeptMPDB_Peptide_Assay_PAMPA(4).csv')
+    df = pd.read_csv('./peptide_synthesis_adapted.csv')
 
-    y = df['Permeability'].values.reshape(-1,1)
-
-    df[df['Permeability'] >= -6] = 1
-    df[df['Permeability'] < -6] = 0
-    y = df['Permeability'].values
-    y = y.astype('float32')
+    y = df['label'].values.astype('float32')
 
     from sklearn.model_selection import KFold,train_test_split
 
