@@ -41,20 +41,38 @@ py -3.10 -m venv .venv
 python -V    # should print Python 3.10.x
 
 # install deps in the order torch -> dgl -> dgllife -> rest, because each
-# layer pins specific versions of the one below
+# layer pins specific versions of the one below.
+#
+# IMPORTANT: Multi_CycGT's Model_TGCN.forward() calls .to("cuda") unconditionally
+# inside the model, so CPU-only training crashes with "Torch not compiled with
+# CUDA enabled" partway through the first batch. Pick the CUDA path below if you
+# have an NVIDIA GPU. The CPU path requires patching the model code (grep
+# to\("cuda"\) and .cuda\(\) in model/deep_learning/gcn_transformer_fc/).
 pip install --upgrade pip
-pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cpu
-pip install dgl==1.1.0 -f https://data.dgl.ai/wheels/repo.html
+
+# --- CUDA path (NVIDIA GPU, driver R515+ for CUDA 11.7) ---
+pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cu117
+pip install dgl==1.1.0+cu117 -f https://data.dgl.ai/wheels/repo.html
+# If the dgl version-pinned line errors with "no matching distribution",
+# fall back to the cu117 index without the pin:
+#   pip install dgl -f https://data.dgl.ai/wheels/cu117/repo.html
+
+# --- CPU path (no NVIDIA GPU; requires patching .to("cuda") calls in code) ---
+# pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cpu
+# pip install dgl==1.1.0 -f https://data.dgl.ai/wheels/repo.html
+
+# Rest of the stack is hardware-agnostic
 pip install dgllife==0.3.2
 pip install rdkit==2023.9.5 pandas==2.0.2 scikit-learn==1.2.2 numpy==1.24.3
 ```
 
-If you have CUDA 11.7 / 11.8 hardware, replace the torch + dgl lines with the
-CUDA wheels — see the upstream README. Multi_CycGT's `Model_TGCN.forward()`
-calls `.to("cuda")` unconditionally inside the model, so **CPU-only training
-will crash** until those calls are guarded. Easiest path is to actually have
-a GPU; second-easiest is to grep `to\("cuda"\)` and `.cuda\(\)` in
-`model/deep_learning/gcn_transformer_fc/` and replace with a `device` constant.
+Verify CUDA is wired up before continuing (skip if you took the CPU path):
+
+```powershell
+python verify_cuda.py
+```
+
+Should print `ALL CUDA OK` and your GPU name.
 
 ### 2. Apply the dgllife monkey-patch
 
