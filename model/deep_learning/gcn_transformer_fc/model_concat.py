@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from rdkit import Chem
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 import dgl
 from dgllife.utils import *
 from dgllife.model.model_zoo.gcn_predictor import GCNPredictor
@@ -60,7 +60,23 @@ def main_():
         train_X = pd.read_csv(PATH_x_train)
         x_train, y_train = get_data(train_X)
         train_data = list(zip(df_seq_train, list_num_train, x_train, y_train, [i for i in range(len(train_X))]))
-        train_loader_ = DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collate, drop_last=True)
+
+        # 87/13 class imbalance: oversample minority class per batch via
+        # WeightedRandomSampler. Weights are 1 / class_count, so each draw is
+        # uniform over classes rather than uniform over samples. replacement=True
+        # is required when num_samples >= len(weights).
+        y_train_int = np.asarray(y_train).astype(int).ravel()
+        class_counts = np.bincount(y_train_int, minlength=2)
+        weights_per_class = 1.0 / np.maximum(class_counts, 1)
+        sample_weights = torch.tensor(
+            [weights_per_class[y] for y in y_train_int], dtype=torch.float
+        )
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True,
+        )
+        train_loader_ = DataLoader(train_data, batch_size=batch_size, sampler=sampler, collate_fn=collate, drop_last=True)
 
         test_X = pd.read_csv(PATH_x_test)
         x_test, y_test = get_data(test_X)
