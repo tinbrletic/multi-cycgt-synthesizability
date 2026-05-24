@@ -135,14 +135,15 @@ def main_():
             train_epoch_loss /= (i + 1)
 
 
-            os.makedirs(f'./model_origin/gcn_transformer_fc/{num}/gcn/', exist_ok=True)
-            os.makedirs(f'./model_origin/gcn_transformer_fc/{num}/transformer/', exist_ok=True)
-            os.makedirs(f'./model_origin/gcn_transformer_fc/{num}/tgcn/', exist_ok=True)
-
-            torch.save(gcn_net, './model_origin/gcn_transformer_fc/{}/gcn/{}_gcn.pt'.format(num, epoch))
-            torch.save(model_trans,
-                       './model_origin/gcn_transformer_fc/{}/transformer/{}_transformer.pt'.format(num, epoch))
-            torch.save(model_tgcn, './model_origin/gcn_transformer_fc/{}/tgcn/{}_tgcn.pt'.format(num, epoch))
+            # Per-epoch checkpoint saves disabled: with 500 epochs x 10 folds x
+            # 3 models = 15k file writes, the upstream behavior fills ~90 GB
+            # (and previously much more, see tsne_list note in models.py). We
+            # only need per-epoch predictions for the comparison; those still
+            # land in pred_data_origin/ as small CSVs. If you need checkpoints
+            # for analysis later, re-enable just for the final epoch:
+            #   if epoch == 500:
+            #       os.makedirs(f'./model_origin/gcn_transformer_fc/{num}/', exist_ok=True)
+            #       torch.save(model_tgcn, f'./model_origin/gcn_transformer_fc/{num}/final_tgcn.pt')
 
             def train_test_val(dataloader):
                 epoch_loss, epoch_acc = 0, 0

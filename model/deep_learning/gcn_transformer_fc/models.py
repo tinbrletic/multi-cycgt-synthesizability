@@ -159,8 +159,12 @@ class Model_TGCN(nn.Module):
         x_l=x_l.to("cpu")
         num_out = self.num_fc(x_l)
         num_out = self.nrom(num_out).to("cuda")
-        tsne = torch.cat([out,gcn_i,num_out],dim=-1).detach().to('cpu').numpy()
-        self.tsne_list.append(tsne)
+        # tsne_list accumulator removed: it was upstream legacy for paper t-SNE
+        # figures, never read by model_concat.py, and silently grew unbounded
+        # (~8 MB per forward pass) -- bloated every torch.save(model_tgcn) by
+        # GBs and would eventually OOM on long training runs.
+        # tsne = torch.cat([out,gcn_i,num_out],dim=-1).detach().to('cpu').numpy()
+        # self.tsne_list.append(tsne)
         p = torch.cat([out,gcn_i,num_out],dim=-1).to("cpu")
         out = self.fc1(p)
         out = self.sig(out)
