@@ -1,17 +1,23 @@
+import csv
 import os
 import pickle
+from pathlib import Path
+
 import torch.nn as nn
 from models import Transformer_test, Model_TGCN, batch_size
 from data_pretreatment import func
 import numpy as np
 import pandas as pd
 from rdkit import Chem
+from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 import torch
 from torch.utils.data import DataLoader, WeightedRandomSampler
 import dgl
 from dgllife.utils import *
 from dgllife.model.model_zoo.gcn_predictor import GCNPredictor
 torch.cuda.empty_cache()
+
+RESULTS_CSV = Path(__file__).parent / "results_per_fold.csv"
 
 def main_():
     for num in range(1, 11):
@@ -191,6 +197,54 @@ def main_():
             pd.DataFrame(tt).to_csv(
                 './pred_data_origin/gcn_transformer_fc/{}/val/experiment_{}_predicted_valid_values.csv'.format(num, epoch),
                 index=False)
+
+        # Final-epoch test/val metrics. drop_last=True in the loaders truncates
+        # the eval sets, so len(test_list) <= len(PATH_x_test rows); we score
+        # only the matched prefix and record both counts for transparency.
+        y_test_full = pd.read_csv(PATH_x_test, usecols=['label']).values.ravel().astype(int)
+        y_val_full = pd.read_csv(PATH_x_val, usecols=['label']).values.ravel().astype(int)
+        n_test, n_val = len(test_list), len(val_list)
+        y_test_match = y_test_full[:n_test]
+        y_val_match = y_val_full[:n_val]
+        test_preds = np.asarray(test_list).ravel()
+        val_preds = np.asarray(val_list).ravel()
+        test_bin = (test_preds >= 0.5).astype(int)
+        val_bin = (val_preds >= 0.5).astype(int)
+        test_auc = (
+            float(roc_auc_score(y_test_match, test_preds))
+            if len(set(y_test_match.tolist())) > 1 else float('nan')
+        )
+        val_auc = (
+            float(roc_auc_score(y_val_match, val_preds))
+            if len(set(y_val_match.tolist())) > 1 else float('nan')
+        )
+        test_f1 = float(f1_score(y_test_match, test_bin, zero_division=0))
+        val_f1 = float(f1_score(y_val_match, val_bin, zero_division=0))
+        test_acc = float(accuracy_score(y_test_match, test_bin))
+        val_acc = float(accuracy_score(y_val_match, val_bin))
+        print(
+            f"Fold {num} final (epoch {epoch}): "
+            f"test AUC={test_auc:.4f} F1={test_f1:.4f} ACC={test_acc:.4f} "
+            f"on {n_test}/{len(y_test_full)} samples"
+        )
+        write_header = not RESULTS_CSV.exists()
+        with open(RESULTS_CSV, "a", newline="") as fh:
+            writer = csv.writer(fh)
+            if write_header:
+                writer.writerow([
+                    "fold", "epoch",
+                    "test_auc", "test_f1", "test_accuracy",
+                    "val_auc", "val_f1", "val_accuracy",
+                    "n_test_eval", "n_test_total",
+                    "n_val_eval", "n_val_total",
+                ])
+            writer.writerow([
+                num, epoch,
+                test_auc, test_f1, test_acc,
+                val_auc, val_f1, val_acc,
+                n_test, len(y_test_full),
+                n_val, len(y_val_full),
+            ])
 
 
 if __name__ == '__main__':
