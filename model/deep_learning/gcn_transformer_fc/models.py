@@ -144,7 +144,10 @@ class Transformer_test(nn.Module):
 class Model_TGCN(nn.Module):
     def __init__(self):
         super(Model_TGCN,self).__init__()
-        self.num_fc = nn.Linear(103, 128)
+        # FC dim adapted from upstream's 103 (CycPeptMPDB descriptor count) to 25
+        # (our peptide_synthesis_adapted.csv produces 25 numeric features after
+        # dropping the 7 metadata columns in create_dataset_number).
+        self.num_fc = nn.Linear(25, 128)
         self.nrom = nn.BatchNorm1d(128)
         self.fc1 = nn.Linear(batch_size*128+40+128, config.num_classes)
         self.sig = nn.Sigmoid()
