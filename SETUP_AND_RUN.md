@@ -52,10 +52,10 @@ pip install --upgrade pip
 
 # --- CUDA path (NVIDIA GPU, driver R515+ for CUDA 11.7) ---
 pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cu117
-pip install dgl==1.1.0+cu117 -f https://data.dgl.ai/wheels/repo.html
-# If the dgl version-pinned line errors with "no matching distribution",
-# fall back to the cu117 index without the pin:
-#   pip install dgl -f https://data.dgl.ai/wheels/cu117/repo.html
+# DGL CUDA wheels live on per-CUDA-version sub-indexes; the CUDA build is
+# encoded in the wheel filename, so the version constraint stays plain `1.1.0`
+# (the generic wheels/repo.html only carries CPU wheels for older versions).
+pip install dgl==1.1.0 -f https://data.dgl.ai/wheels/cu117/repo.html
 
 # --- CPU path (no NVIDIA GPU; requires patching .to("cuda") calls in code) ---
 # pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cpu
