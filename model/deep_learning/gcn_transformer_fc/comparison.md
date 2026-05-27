@@ -49,13 +49,17 @@ us to address via early stopping.
 |---|---|---|---|---|
 | **Multi_CycGT (gcn_transformer_fc), best-val-AUC epoch** | **0.765 ± 0.063** | 0.749 ± 0.113 | 0.652 ± 0.127 | Pooled (1280 samples): AUC 0.744, F1 0.759, ACC 0.652. Per-fold best epochs: 6, 7, 10, 300, 22, 15, 14, 94, 15, 2 (median 14.5) |
 | Multi_CycGT (gcn_transformer_fc), final epoch 500 | 0.661 ± 0.089 | 0.868 ± 0.032 | 0.781 ± 0.046 | Pooled (1280 samples): AUC 0.668, F1 0.869, ACC 0.781. Reported for transparency; model is overfit by this epoch |
-| LogReg (UOOP best FS) | `<fill>` | `<fill>` | `<fill>` | best FS: `<which?>` |
-| Random Forest (UOOP best FS) | `<fill>` | `<fill>` | `<fill>` | best FS: `<which?>` |
-| SVM (UOOP best FS) | `<fill>` | `<fill>` | `<fill>` | best FS: `<which?>` |
-| KNN (UOOP best FS) | `<fill>` | `<fill>` | `<fill>` | best FS: `<which?>` |
-| Decision Tree (UOOP best FS) | `<fill>` | `<fill>` | `<fill>` | best FS: `<which?>` |
-| Naive Bayes (UOOP best FS) | `<fill>` | `<fill>` | `<fill>` | best FS: `<which?>` |
+| Random Forest (UOOP best FS) | **0.764 ± 0.058** | 0.904 ± 0.015 | 0.835 ± 0.025 | best FS: `All` (no FS); top feats: acidic_group, non-polar_group, X5_K. MCC 0.326 ± 0.092 |
+| Naive Bayes (UOOP best FS) | 0.756 ± 0.058 | 0.818 ± 0.027 | 0.718 ± 0.036 | best FS: `Chi-square-inCV`; top feats: peptide_len, hydrophobic_janin, hydrophobic_engleman |
+| LogReg (UOOP best FS) | 0.749 ± 0.055 | 0.792 ± 0.034 | 0.687 ± 0.042 | best FS: `Kruskal-inCV`; top feats: hydrophobic_janin, hydrophobic_kyte-doolittle, X5_K |
+| SVM (UOOP best FS) | 0.734 ± 0.060 | 0.884 ± 0.018 | 0.805 ± 0.028 | best FS: `MW-inCV`; top feats: hydrophobic_janin, hydrophobic_eisenberg, X5_K |
+| KNN (UOOP best FS) | 0.732 ± 0.060 | 0.815 ± 0.025 | 0.713 ± 0.034 | best FS: `Chi-square-inCV`; top feats: hydrophobic_janin, hydrophobic_kyte-doolittle, hydrophobic_eisenberg |
+| Decision Tree (UOOP best FS) | 0.726 ± 0.051 | 0.844 ± 0.037 | 0.751 ± 0.049 | best FS: `Kruskal-inCV`; top feats: hydrophobic_janin, hydrophobic_kyte-doolittle, X5_K |
 | Majority-class baseline (always predict 1) | 0.500 | 0.927 | 0.863 | Reference floor for AUC; ceiling for F1/ACC on this imbalance |
+
+> **UOOP source:** `UOOP-Project/results/smote_in_cv/20260523_144512/feature_selection_metrics_20260523_144525.csv`.
+> Each row aggregates 100 fits (10-fold × 10 repeats), so std columns are tighter than Multi_CycGT's pure 10-fold std.
+> Best FS picked post-hoc by max mean AUC per classifier — mildly optimistic; Multi_CycGT's best-val-AUC pick is principled (val never updated weights), so the comparison is conservative on UOOP's side.
 
 ## Per-fold breakdown (best-val-AUC epoch)
 
@@ -75,16 +79,42 @@ us to address via early stopping.
 
 ## Observations
 
-**Multimodal representation learns *something* about synthesizability.**
-Best-val-epoch test AUC of 0.76 is well above the 0.50 chance line. The model
-ranks a randomly chosen successful peptide above a randomly chosen failed one
-about 76% of the time. Discrimination is real but not strong — classical models
-with rich hand-crafted features (440 sequence-composition features +
-physicochemical descriptors + SMOTE) may match or beat this depending on the
-choice of classifier and feature-selection strategy. Whether the multimodal
-graph + sequence + descriptors representation captures complementary
-information to UOOP's handcrafted features is the central question this table
-will answer — fill in the UOOP rows to settle it.
+**Multimodal representation learns *something* about synthesizability, but does
+not beat handcrafted-feature Random Forest.** Multi_CycGT's best-val-epoch test
+AUC of **0.765 ± 0.063** is statistically indistinguishable from UOOP's best
+classical baseline — Random Forest on all 233 handcrafted features at
+**0.764 ± 0.058**. Every UOOP classifier with proper feature selection lands in
+the 0.73–0.76 AUC band; the multimodal model joins that band rather than
+exceeding it. On F1 and accuracy the picture is starker: RF reports F1 0.904 /
+ACC 0.835 vs Multi_CycGT's 0.749 / 0.652 at the best-val epoch — but those
+metrics reward the always-predict-positive bias an unbalanced classifier learns,
+so they understate Multi_CycGT (which is more cautious on its 0.5 threshold)
+more than they reflect true ranking quality. AUC is the apples-to-apples number,
+and on that metric **the rich multimodal representation is not adding value over
+RF on handcrafted features** for this task at N=1771.
+
+**Why no uplift?** Three plausible explanations, in roughly decreasing
+likelihood: (1) **Data scale.** 1771 samples is small for a ~2M-parameter
+multimodal model; classical models with informative engineered features are
+near-optimal on a dataset this size. (2) **Inductive-bias mismatch.** The graph
++ tokenized-SMILES + LogP/TPSA inputs were chosen to capture permeability
+(lipophilicity, membrane interaction); synthesizability failures (aggregation,
+β-sheet, difficult couplings) may correlate more with hydrophobicity *patterns*
+across the sequence — which both pipelines see, but RF's `hydrophobic_janin`,
+`hydrophobic_kyte-doolittle`, `acidic_group`, `peptide_len` features encode
+directly. (3) **Overfitting and weak regularization.** The 500-epoch run with
+no early stopping needed post-hoc epoch selection just to reach the RF
+ballpark; with proper regularization (dropout, early stopping, lower LR) the
+multimodal model might pull ahead, but as configured it does not.
+
+**Practical takeaway for the writeup.** Frame Multi_CycGT as a transfer
+experiment that achieved parity with the best classical baseline — not a win,
+but a non-trivial result given the architecture was designed for a different
+chemistry and a different endpoint. The interesting follow-ups are
+(a) regularization improvements to recover the missing headroom, and
+(b) feature-importance analysis of the FC branch to check whether per-residue
+LogP/TPSA are actually being used (vs. the GCN/Transformer branches doing all
+the work).
 
 **Overfitting is the dominant failure mode at N=1771.** Training for 500
 epochs with no regularization is too aggressive: 8 of 10 folds peak by epoch

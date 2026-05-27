@@ -1,5 +1,6 @@
 .claude-flow/
 .remeber/
+CLAUDE.md
 
 # Python bytecode and test caches
 __pycache__/
