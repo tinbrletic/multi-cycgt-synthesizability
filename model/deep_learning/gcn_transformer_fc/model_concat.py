@@ -6,6 +6,10 @@ from pathlib import Path
 import torch.nn as nn
 from models import Transformer_test, Model_TGCN, batch_size
 from data_pretreatment import func
+# Qualified import on purpose: `from dgllife.utils import *` below also exports an
+# `EarlyStopping` (different signature, no min_delta). A bare `from early_stopping
+# import EarlyStopping` here would be silently clobbered by that wildcard import.
+import early_stopping
 import numpy as np
 import pandas as pd
 from rdkit import Chem
@@ -18,6 +22,13 @@ from dgllife.model.model_zoo.gcn_predictor import GCNPredictor
 torch.cuda.empty_cache()
 
 RESULTS_CSV = Path(__file__).parent / "results_per_fold.csv"
+
+# Early stopping: halt a fold once validation loss has not improved for
+# EARLY_STOP_PATIENCE consecutive epochs. The model kept is the one at the stop
+# epoch (no best-weight restore). The 500-epoch loop below stays as a safety
+# ceiling that early stopping normally fires well before.
+EARLY_STOP_PATIENCE = 50
+EARLY_STOP_MIN_DELTA = 0.0
 
 def main_():
     for num in range(1, 11):
@@ -99,6 +110,9 @@ def main_():
         optimizer = torch.optim.Adam([{'params': gcn_net.parameters()},
                                       {'params': model_trans.parameters()},
                                       {'params': model_tgcn.parameters()}], lr=0.001)
+
+        stopper = early_stopping.EarlyStopping(patience=EARLY_STOP_PATIENCE,
+                                               min_delta=EARLY_STOP_MIN_DELTA, mode="min")
 
         for epoch in range(1, 501):
             # train
@@ -199,6 +213,18 @@ def main_():
                 './pred_data_origin/gcn_transformer_fc/{}/val/experiment_{}_predicted_valid_values.csv'.format(num, epoch),
                 index=False)
 
+            # Early stopping on validation loss. step() is called once per epoch;
+            # it returns True once val loss has not improved for EARLY_STOP_PATIENCE
+            # epochs. We keep the current (stop-epoch) weights -- the post-loop
+            # scoring block below already uses this epoch's test_list/val_list.
+            if stopper.step(val_epoch_loss):
+                print(
+                    f"Fold {num}: early stopping at epoch {epoch} "
+                    f"(best val loss {stopper.best:.4f} @ epoch {stopper.best_epoch}; "
+                    f"no improvement for {EARLY_STOP_PATIENCE} epochs)"
+                )
+                break
+
         # Final-epoch test/val metrics. drop_last=True in the loaders truncates
         # the eval sets, so len(test_list) <= len(PATH_x_test rows); we score
         # only the matched prefix and record both counts for transparency.
@@ -238,6 +264,7 @@ def main_():
                     "val_auc", "val_f1", "val_accuracy",
                     "n_test_eval", "n_test_total",
                     "n_val_eval", "n_val_total",
+                    "best_val_loss_epoch", "best_val_loss",
                 ])
             writer.writerow([
                 num, epoch,
@@ -245,6 +272,7 @@ def main_():
                 val_auc, val_f1, val_acc,
                 n_test, len(y_test_full),
                 n_val, len(y_val_full),
+                stopper.best_epoch, stopper.best,
             ])
 
 

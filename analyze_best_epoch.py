@@ -33,6 +33,21 @@ def safe_auc(preds, labels):
     return float(roc_auc_score(labels, preds))
 
 
+def final_epoch(fold):
+    """Largest epoch index with a test-prediction CSV for this fold.
+
+    With early stopping each fold may stop at a different epoch, so the 'final'
+    (last trained) epoch is no longer a fixed 500 -- discover it from the files
+    actually written. Returns None if the fold produced no prediction files.
+    """
+    test_dir = PRED_DIR / str(fold) / "test"
+    epochs = [
+        int(p.stem.split("_")[1])
+        for p in test_dir.glob("experiment_*_predicted_test_values.csv")
+    ]
+    return max(epochs) if epochs else None
+
+
 rows = []
 for fold in range(1, 11):
     val_aucs = np.full(500, np.nan)
@@ -58,8 +73,13 @@ for fold in range(1, 11):
     test_f1 = float(f1_score(tl, test_bin, zero_division=0))
     test_acc = float(accuracy_score(tl, test_bin))
 
-    # Final-epoch test AUC for comparison
-    final_tp, final_tl = load_preds(PRED_DIR / str(fold) / "test" / "experiment_500_predicted_test_values.csv")
+    # Final (last-trained) epoch test AUC for comparison. With early stopping this
+    # is the per-fold stop epoch, not a fixed 500.
+    fe = final_epoch(fold)
+    final_tp, final_tl = (
+        load_preds(PRED_DIR / str(fold) / "test" / f"experiment_{fe}_predicted_test_values.csv")
+        if fe is not None else (None, None)
+    )
     final_test_auc = safe_auc(final_tp, final_tl)
 
     rows.append({
@@ -69,7 +89,8 @@ for fold in range(1, 11):
         "test_auc_at_best": test_auc,
         "test_f1_at_best": test_f1,
         "test_accuracy_at_best": test_acc,
-        "test_auc_at_final_500": final_test_auc,
+        "final_epoch": fe,
+        "test_auc_at_final": final_test_auc,
         "auc_uplift_from_early_stop": test_auc - final_test_auc,
     })
 
@@ -88,7 +109,7 @@ for col in ["test_auc_at_best", "test_f1_at_best", "test_accuracy_at_best"]:
     print(f"  {col:28s} : {mean:.4f} +/- {std:.4f}  "
           f"(min {best[col].min():.4f}, max {best[col].max():.4f})")
 print()
-print("Final-epoch test AUC was:", f"{best['test_auc_at_final_500'].mean():.4f} +/- {best['test_auc_at_final_500'].std():.4f}")
+print("Final-epoch test AUC was:", f"{best['test_auc_at_final'].mean():.4f} +/- {best['test_auc_at_final'].std():.4f}")
 print("Best-epoch test AUC is :", f"{best['test_auc_at_best'].mean():.4f} +/- {best['test_auc_at_best'].std():.4f}")
 print("Mean uplift            :", f"{best['auc_uplift_from_early_stop'].mean():+.4f}")
 print()

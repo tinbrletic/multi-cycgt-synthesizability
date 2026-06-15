@@ -9,6 +9,21 @@ from sklearn.metrics import roc_auc_score, f1_score, accuracy_score, precision_s
 RESULTS = Path("model/deep_learning/gcn_transformer_fc/results_per_fold.csv")
 PRED_DIR = Path("model/deep_learning/gcn_transformer_fc/pred_data_origin/gcn_transformer_fc")
 
+
+def final_epoch(fold):
+    """Largest epoch index with a test-prediction CSV for this fold.
+
+    With early stopping each fold may stop at a different epoch, so the 'final'
+    (last trained) epoch is no longer a fixed 500 -- discover it from the files
+    actually written. Returns None if the fold produced no prediction files.
+    """
+    test_dir = PRED_DIR / str(fold) / "test"
+    epochs = [
+        int(p.stem.split("_")[1])
+        for p in test_dir.glob("experiment_*_predicted_test_values.csv")
+    ]
+    return max(epochs) if epochs else None
+
 print("=" * 70)
 print("PART 1: per-fold final-epoch metrics (from results_per_fold.csv)")
 print("=" * 70)
@@ -32,9 +47,10 @@ print()
 all_preds = []
 all_labels = []
 for fold in range(1, 11):
-    p = PRED_DIR / str(fold) / "test" / "experiment_500_predicted_test_values.csv"
-    if not p.exists():
-        print(f"MISSING {p}")
+    fe = final_epoch(fold)
+    p = (PRED_DIR / str(fold) / "test" / f"experiment_{fe}_predicted_test_values.csv") if fe else None
+    if p is None or not p.exists():
+        print(f"MISSING final-epoch test preds for fold {fold}")
         continue
     sub = pd.read_csv(p).dropna(subset=["predict"])
     all_preds.append(sub["predict"].values)
